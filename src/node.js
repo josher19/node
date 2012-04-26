@@ -109,6 +109,7 @@
 
     } else {
       var Module = NativeModule.require('module');
+      var path = NativeModule.require('path');
 
       // If -i or --interactive were passed, or stdin is a TTY.
       if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
@@ -125,13 +126,15 @@
         }
 
         var home = process.env.HOME;
-        var pwd = NativeModule.require('path').resolve('.');
-
-        var noderc = home + "/.noderc.js";
-        var pwdrc = pwd + "/.noderc.js";
-
-        var homeContext = home ? loadContext(noderc) : {};
-        var pwdContext = pwd ? loadContext(pwdrc) : {};
+        var pwd = path.resolve('.');
+        if (home) {
+          var noderc = path.join(home, ".noderc.js");
+          var homeContext = loadContext(noderc);
+        }
+        if (pwd) {
+          var pwdrc = path.join(pwd, ".noderc.js");
+          var pwdContext = loadContext(pwdrc);
+        }
 
         var repl = Module.requireRepl().start(opts);
         repl.on('exit', function() {
