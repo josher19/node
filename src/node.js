@@ -123,10 +123,31 @@
         if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
           opts.useColors = false;
         }
+
+        var home = process.env.HOME;
+        var pwd = NativeModule.require('path').resolve('.');
+
+        var noderc = home + "/.noderc.js";
+        var pwdrc = pwd + "/.noderc.js";
+
+        var homeContext = home ? loadContext(noderc) : {};
+        var pwdContext = pwd ? loadContext(pwdrc) : {};
+
         var repl = Module.requireRepl().start(opts);
         repl.on('exit', function() {
           process.exit();
         });
+
+        for (var i in homeContext) {
+          if (homeContext.hasOwnProperty(i)) {
+            repl.context[i] = homeContext[i];
+          }
+        }
+        for (var i in pwdContext) {
+          if (pwdContext.hasOwnProperty(i)) {
+            repl.context[i] = pwdContext[i];
+          }
+        }
 
       } else {
         // Read all of stdin - execute it.
@@ -144,6 +165,20 @@
         });
       }
     }
+  }
+
+  function loadContext(file) {
+    var Module = NativeModule.require('module');
+    var context;
+    try {
+      context = Module._load(file);
+    } catch (e) {
+      context = {};
+    }
+    if (!context || typeof context !== 'object') {
+      context = {};
+    }
+    return context;
   }
 
   startup.globalVariables = function() {
