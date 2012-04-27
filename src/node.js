@@ -137,8 +137,11 @@
         }
 
         var repl = Module.requireRepl().start(opts);
+        loadReplHistory(repl);
         repl.on('exit', function() {
-          process.exit();
+          saveReplHistory(repl, function() {
+            process.exit();
+          });
         });
 
         for (var i in homeContext) {
@@ -182,6 +185,35 @@
       context = {};
     }
     return context;
+  }
+
+  var nodeHistory;
+
+  function loadReplHistory(repl) {
+    var fs = NativeModule.require('fs');
+    var path = NativeModule.require('path');
+    var home = process.env.HOME;
+
+    if (!home) return;
+    nodeHistory = path.join(home, ".node_history");
+
+    fs.readFile(nodeHistory, function(err, data) {
+      if (err) return;
+      try {
+        var history = JSON.parse(data);
+        repl.setHistory(history);
+      } catch (e) { }
+    });
+  }
+
+  function saveReplHistory(repl, callback) {
+    var fs = NativeModule.require('fs');
+    var history = JSON.stringify(repl.getHistory(), false, 1);
+    if (!nodeHistory) return callback();
+
+    fs.writeFile(nodeHistory, history, function(err) {
+      callback();
+    });
   }
 
   startup.globalVariables = function() {
