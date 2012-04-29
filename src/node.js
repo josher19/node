@@ -125,35 +125,34 @@
           opts.useColors = false;
         }
 
-        var home = process.env.HOME;
-        var pwd = path.resolve('.');
-        if (home) {
-          var noderc = path.join(home, ".noderc.js");
-          var homeContext = loadContext(noderc);
-        }
-        if (pwd) {
-          var pwdrc = path.join(pwd, ".noderc.js");
-          var pwdContext = loadContext(pwdrc);
-        }
-
         var repl = Module.requireRepl().start(opts);
-        loadReplHistory(repl);
+
+        var home = (process.platform === 'win32' ?
+                    process.env.USERDATA :
+                    process.env.HOME);
+        if (home) {
+          var noderc = path.join(home, '.noderc.js');
+          var nodeHistory = path.join(home, '.node_history');
+        }
+        var pwd = path.resolve('.');
+        var pwdrc = path.join(pwd, '.noderc.js');
+        [noderc, pwdrc].forEach(function(file) {
+          try {
+            repl.loadContext(file);
+          } catch (e) {
+            if (e.code !== 'MODULE_NOT_FOUND') {
+              // rethrow any errors generated from noderc
+              throw e;
+            }
+          }
+        });
+
+        repl.loadHistory(nodeHistory);
         repl.on('exit', function() {
-          saveReplHistory(repl, function() {
+          repl.saveHistory(nodeHistory, function() {
             process.exit();
           });
         });
-
-        for (var i in homeContext) {
-          if (homeContext.hasOwnProperty(i)) {
-            repl.context[i] = homeContext[i];
-          }
-        }
-        for (var i in pwdContext) {
-          if (pwdContext.hasOwnProperty(i)) {
-            repl.context[i] = pwdContext[i];
-          }
-        }
 
       } else {
         // Read all of stdin - execute it.
@@ -171,49 +170,6 @@
         });
       }
     }
-  }
-
-  function loadContext(file) {
-    var Module = NativeModule.require('module');
-    var context;
-    try {
-      context = Module._load(file);
-    } catch (e) {
-      context = {};
-    }
-    if (!context || typeof context !== 'object') {
-      context = {};
-    }
-    return context;
-  }
-
-  var nodeHistory;
-
-  function loadReplHistory(repl) {
-    var fs = NativeModule.require('fs');
-    var path = NativeModule.require('path');
-    var home = process.env.HOME;
-
-    if (!home) return;
-    nodeHistory = path.join(home, ".node_history");
-
-    fs.readFile(nodeHistory, function(err, data) {
-      if (err) return;
-      try {
-        var history = JSON.parse(data);
-        repl.setHistory(history);
-      } catch (e) { }
-    });
-  }
-
-  function saveReplHistory(repl, callback) {
-    var fs = NativeModule.require('fs');
-    var history = JSON.stringify(repl.getHistory(), false, 1);
-    if (!nodeHistory) return callback();
-
-    fs.writeFile(nodeHistory, history, function(err) {
-      callback();
-    });
   }
 
   startup.globalVariables = function() {
