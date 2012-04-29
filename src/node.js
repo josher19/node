@@ -128,7 +128,7 @@
         var repl = Module.requireRepl().start(opts);
 
         var home = (process.platform === 'win32' ?
-                    process.env.USERDATA :
+                    process.env.HOMEDRIVE + process.env.HOMEPATH :
                     process.env.HOME);
         if (home) {
           var noderc = path.join(home, '.noderc.js');
