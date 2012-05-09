@@ -25,6 +25,14 @@ parsing only. It parses a message into headers and body but it does not
 parse the actual headers or the body.
 
 
+## http.STATUS_CODES
+
+* {Object}
+
+A collection of all the standard HTTP response status codes, and the
+short description of each.  For example, `http.STATUS_CODES[404] === 'Not
+Found'`.
+
 ## http.createServer([requestListener])
 
 Returns a new web server object.
@@ -258,9 +266,9 @@ Also `request.httpVersionMajor` is the first integer and
 
 ### request.setEncoding([encoding])
 
-Set the encoding for the request body. Either `'utf8'` or `'binary'`. Defaults
-to `null`, which means that the `'data'` event will emit a `Buffer` object..
-
+Set the encoding for the request body. See
+[stream.setEncoding()](stream.html#stream_stream_setencoding_encoding)
+for more information.
 
 ### request.pause()
 
@@ -543,7 +551,7 @@ Example:
 In node 0.5.3+ there is a new implementation of the HTTP Agent which is used
 for pooling sockets used in HTTP client requests.
 
-Previously, a single agent instance help the pool for single host+port. The
+Previously, a single agent instance helped pool for a single host+port. The
 current implementation now holds sockets for any number of hosts.
 
 The current HTTP Agent also defaults client requests to using
@@ -873,9 +881,9 @@ The response trailers object. Only populated after the 'end' event.
 
 ### response.setEncoding([encoding])
 
-Set the encoding for the response body. Either `'utf8'`, `'ascii'`, or
-`'base64'`. Defaults to `null`, which means that the `'data'` event will emit
-a `Buffer` object.
+Set the encoding for the response body. See
+[stream.setEncoding()](stream.html#stream_stream_setencoding_encoding)
+for more information.
 
 ### response.pause()
 

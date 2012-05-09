@@ -31,9 +31,6 @@
 #include <locale.h>
 #include <signal.h>
 #include <stdio.h>
-#if defined(_MSC_VER)
-#define snprintf _snprintf
-#endif
 #include <stdlib.h>
 #include <string.h>
 #if !defined(_MSC_VER)
@@ -2770,14 +2767,46 @@ char** Init(int argc, char *argv[]) {
 }
 
 
+struct AtExitCallback {
+  AtExitCallback* next_;
+  void (*cb_)(void* arg);
+  void* arg_;
+};
+
+static AtExitCallback* at_exit_functions_;
+
+
+void RunAtExit() {
+  AtExitCallback* p = at_exit_functions_;
+  at_exit_functions_ = NULL;
+
+  while (p) {
+    AtExitCallback* q = p->next_;
+    p->cb_(p->arg_);
+    delete p;
+    p = q;
+  }
+}
+
+
+void AtExit(void (*cb)(void* arg), void* arg) {
+  AtExitCallback* p = new AtExitCallback;
+  p->cb_ = cb;
+  p->arg_ = arg;
+  p->next_ = at_exit_functions_;
+  at_exit_functions_ = p;
+}
+
+
 void EmitExit(v8::Handle<v8::Object> process_l) {
   // process.emit('exit')
+  process_l->Set(String::NewSymbol("_exiting"), True());
   Local<Value> emit_v = process_l->Get(String::New("emit"));
   assert(emit_v->IsFunction());
   Local<Function> emit = Local<Function>::Cast(emit_v);
-  Local<Value> args[] = { String::New("exit") };
+  Local<Value> args[] = { String::New("exit"), Integer::New(0) };
   TryCatch try_catch;
-  emit->Call(process_l, 1, args);
+  emit->Call(process_l, 2, args);
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
@@ -2826,33 +2855,40 @@ int Start(int argc, char *argv[]) {
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
 
-  v8::V8::Initialize();
-  v8::HandleScope handle_scope;
+  V8::Initialize();
+  {
+    Locker locker;
+    HandleScope handle_scope;
 
-  // Create the one and only Context.
-  Persistent<v8::Context> context = v8::Context::New();
-  v8::Context::Scope context_scope(context);
+    // Create the one and only Context.
+    Persistent<Context> context = Context::New();
+    Context::Scope context_scope(context);
 
-  // Use original argv, as we're just copying values out of it.
-  Handle<Object> process_l = SetupProcessObject(argc, argv);
-  v8_typed_array::AttachBindings(context->Global());
+    // Use original argv, as we're just copying values out of it.
+    Handle<Object> process_l = SetupProcessObject(argc, argv);
+    v8_typed_array::AttachBindings(context->Global());
 
-  // Create all the objects, load modules, do everything.
-  // so your next reading stop should be node::Load()!
-  Load(process_l);
+    // Create all the objects, load modules, do everything.
+    // so your next reading stop should be node::Load()!
+    Load(process_l);
 
-  // All our arguments are loaded. We've evaluated all of the scripts. We
-  // might even have created TCP servers. Now we enter the main eventloop. If
-  // there are no watchers on the loop (except for the ones that were
-  // uv_unref'd) then this function exits. As long as there are active
-  // watchers, it blocks.
-  uv_run(uv_default_loop());
+    // All our arguments are loaded. We've evaluated all of the scripts. We
+    // might even have created TCP servers. Now we enter the main eventloop. If
+    // there are no watchers on the loop (except for the ones that were
+    // uv_unref'd) then this function exits. As long as there are active
+    // watchers, it blocks.
+    uv_run(uv_default_loop());
 
-  EmitExit(process_l);
+    EmitExit(process_l);
+    RunAtExit();
 
 #ifndef NDEBUG
-  // Clean up.
-  context.Dispose();
+    context.Dispose();
+#endif
+  }
+
+#ifndef NDEBUG
+  // Clean up. Not strictly necessary.
   V8::Dispose();
 #endif  // NDEBUG
 
