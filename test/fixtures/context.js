@@ -19,16 +19,5 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common'),
-    path = require('path'),
-    assert = require('assert'),
-    fs = require('fs'),
-    repl = require('repl').start('');
+exports.foo = 'bar';
 
-var nodercFile = path.join(common.fixturesDir, 'context.js');
-
-repl.loadContext(nodercFile);
-
-assert.equal(repl.context.foo, 'bar');
-
-process.exit();
