@@ -42,9 +42,8 @@ Emitted if there was an error receiving data.
 
 `function () { }`
 
-Emitted when the underlying file descriptor has been closed. Not all streams
-will emit this.  (For example, an incoming HTTP request will not emit
-`'close'`.)
+Emitted when the underlying resource (for example, the backing file descriptor)
+has been closed. Not all streams will emit this.
 
 ### stream.readable
 
@@ -73,11 +72,6 @@ Resumes the incoming `'data'` events after a `pause()`.
 ### stream.destroy()
 
 Closes the underlying file descriptor. Stream will not emit any more events.
-
-
-### stream.destroySoon()
-
-After the write queue is drained, close the file descriptor.
 
 ### stream.pipe(destination, [options])
 

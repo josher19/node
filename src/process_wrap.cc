@@ -22,20 +22,12 @@
 #include "node.h"
 #include "handle_wrap.h"
 #include "pipe_wrap.h"
+#include "tty_wrap.h"
+#include "tcp_wrap.h"
+#include "udp_wrap.h"
+
 #include <string.h>
 #include <stdlib.h>
-
-#define UNWRAP \
-  assert(!args.Holder().IsEmpty()); \
-  assert(args.Holder()->InternalFieldCount() > 0); \
-  ProcessWrap* wrap =  \
-      static_cast<ProcessWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) { \
-    uv_err_t err; \
-    err.code = UV_EBADF; \
-    SetErrno(err); \
-    return scope.Close(Integer::New(-1)); \
-  }
 
 namespace node {
 
@@ -48,6 +40,7 @@ using v8::HandleScope;
 using v8::FunctionTemplate;
 using v8::String;
 using v8::Array;
+using v8::Number;
 using v8::Function;
 using v8::TryCatch;
 using v8::Context;
@@ -94,10 +87,60 @@ class ProcessWrap : public HandleWrap {
   ProcessWrap(Handle<Object> object) : HandleWrap(object, NULL) { }
   ~ProcessWrap() { }
 
+  static void ParseStdioOptions(Local<Object> js_options,
+                                uv_process_options_t* options) {
+    Local<Array> stdios = js_options
+        ->Get(String::NewSymbol("stdio")).As<Array>();
+    int len = stdios->Length();
+    options->stdio = new uv_stdio_container_t[len];
+    options->stdio_count = len;
+
+    for (int i = 0; i < len; i++) {
+      Local<Object> stdio = stdios
+          ->Get(Number::New(static_cast<double>(i))).As<Object>();
+      Local<Value> type = stdio->Get(String::NewSymbol("type"));
+
+      if (type->Equals(String::NewSymbol("ignore"))) {
+        options->stdio[i].flags = UV_IGNORE;
+      } else if (type->Equals(String::NewSymbol("pipe"))) {
+        options->stdio[i].flags = UV_CREATE_PIPE;
+        options->stdio[i].data.stream = reinterpret_cast<uv_stream_t*>(
+            PipeWrap::Unwrap(stdio
+                ->Get(String::NewSymbol("handle")).As<Object>())->UVHandle());
+      } else if (type->Equals(String::NewSymbol("wrap"))) {
+        uv_stream_t* stream = NULL;
+        Local<Value> wrapType = stdio->Get(String::NewSymbol("wrapType"));
+        if (wrapType->Equals(String::NewSymbol("pipe"))) {
+          stream = reinterpret_cast<uv_stream_t*>(PipeWrap::Unwrap(stdio
+              ->Get(String::NewSymbol("handle")).As<Object>())->UVHandle());
+        } else if (wrapType->Equals(String::NewSymbol("tty"))) {
+          stream = reinterpret_cast<uv_stream_t*>(TTYWrap::Unwrap(stdio
+              ->Get(String::NewSymbol("handle")).As<Object>())->UVHandle());
+        } else if (wrapType->Equals(String::NewSymbol("tcp"))) {
+          stream = reinterpret_cast<uv_stream_t*>(TCPWrap::Unwrap(stdio
+              ->Get(String::NewSymbol("handle")).As<Object>())->UVHandle());
+        } else if (wrapType->Equals(String::NewSymbol("udp"))) {
+          stream = reinterpret_cast<uv_stream_t*>(UDPWrap::Unwrap(stdio
+              ->Get(String::NewSymbol("handle")).As<Object>())->UVHandle());
+        }
+        assert(stream != NULL);
+
+        options->stdio[i].flags = UV_INHERIT_STREAM;
+        options->stdio[i].data.stream = stream;
+      } else {
+        int fd = static_cast<int>(
+            stdio->Get(String::NewSymbol("fd"))->IntegerValue());
+
+        options->stdio[i].flags = UV_INHERIT_FD;
+        options->stdio[i].data.fd = fd;
+      }
+    }
+  }
+
   static Handle<Value> Spawn(const Arguments& args) {
     HandleScope scope;
 
-    UNWRAP
+    UNWRAP(ProcessWrap)
 
     Local<Object> js_options = args[0]->ToObject();
 
@@ -181,29 +224,8 @@ class ProcessWrap : public HandleWrap {
       options.env[envc] = NULL;
     }
 
-    // options.stdin_stream
-    Local<Value> stdin_stream_v = js_options->Get(
-        String::NewSymbol("stdinStream"));
-    if (!stdin_stream_v.IsEmpty() && stdin_stream_v->IsObject()) {
-      PipeWrap* stdin_wrap = PipeWrap::Unwrap(stdin_stream_v->ToObject());
-      options.stdin_stream = stdin_wrap->UVHandle();
-    }
-
-    // options.stdout_stream
-    Local<Value> stdout_stream_v = js_options->Get(
-        String::NewSymbol("stdoutStream"));
-    if (!stdout_stream_v.IsEmpty() && stdout_stream_v->IsObject()) {
-      PipeWrap* stdout_wrap = PipeWrap::Unwrap(stdout_stream_v->ToObject());
-      options.stdout_stream = stdout_wrap->UVHandle();
-    }
-
-    // options.stderr_stream
-    Local<Value> stderr_stream_v = js_options->Get(
-        String::NewSymbol("stderrStream"));
-    if (!stderr_stream_v.IsEmpty() && stderr_stream_v->IsObject()) {
-      PipeWrap* stderr_wrap = PipeWrap::Unwrap(stderr_stream_v->ToObject());
-      options.stderr_stream = stderr_wrap->UVHandle();
-    }
+    // options.stdio
+    ParseStdioOptions(js_options, &options);
 
     // options.windows_verbatim_arguments
     if (js_options->Get(String::NewSymbol("windowsVerbatimArguments"))->
@@ -232,13 +254,15 @@ class ProcessWrap : public HandleWrap {
       delete [] options.env;
     }
 
+    delete[] options.stdio;
+
     return scope.Close(Integer::New(r));
   }
 
   static Handle<Value> Kill(const Arguments& args) {
     HandleScope scope;
 
-    UNWRAP
+    UNWRAP(ProcessWrap)
 
     int signal = args[0]->Int32Value();
 

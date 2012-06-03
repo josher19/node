@@ -26,18 +26,6 @@
 #include "stream_wrap.h"
 #include "pipe_wrap.h"
 
-#define UNWRAP \
-  assert(!args.Holder().IsEmpty()); \
-  assert(args.Holder()->InternalFieldCount() > 0); \
-  PipeWrap* wrap =  \
-      static_cast<PipeWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) { \
-    uv_err_t err; \
-    err.code = UV_EBADF; \
-    SetErrno(err); \
-    return scope.Close(Integer::New(-1)); \
-  }
-
 namespace node {
 
 using v8::Object;
@@ -96,7 +84,6 @@ void PipeWrap::Initialize(Handle<Object> target) {
 
   NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
   NODE_SET_PROTOTYPE_METHOD(t, "unref", HandleWrap::Unref);
-  NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
 
   NODE_SET_PROTOTYPE_METHOD(t, "readStart", StreamWrap::ReadStart);
   NODE_SET_PROTOTYPE_METHOD(t, "readStop", StreamWrap::ReadStop);
@@ -149,7 +136,7 @@ PipeWrap::PipeWrap(Handle<Object> object, bool ipc)
 Handle<Value> PipeWrap::Bind(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(PipeWrap)
 
   String::AsciiValue name(args[0]);
 
@@ -166,7 +153,7 @@ Handle<Value> PipeWrap::Bind(const Arguments& args) {
 Handle<Value> PipeWrap::SetPendingInstances(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(PipeWrap)
 
   int instances = args[0]->Int32Value();
 
@@ -180,7 +167,7 @@ Handle<Value> PipeWrap::SetPendingInstances(const Arguments& args) {
 Handle<Value> PipeWrap::Listen(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(PipeWrap)
 
   int backlog = args[0]->Int32Value();
 
@@ -205,8 +192,8 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   assert(wrap->object_.IsEmpty() == false);
 
   if (status != 0) {
-    // TODO Handle server error (set errno and call onconnection with NULL)
-    assert(0);
+    SetErrno(uv_last_error(uv_default_loop()));
+    MakeCallback(wrap->object_, "onconnection", 0, NULL);
     return;
   }
 
@@ -269,7 +256,7 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
 Handle<Value> PipeWrap::Open(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(PipeWrap)
 
   int fd = args[0]->IntegerValue();
 
@@ -282,7 +269,7 @@ Handle<Value> PipeWrap::Open(const Arguments& args) {
 Handle<Value> PipeWrap::Connect(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(PipeWrap)
 
   String::AsciiValue name(args[0]);
 

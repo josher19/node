@@ -178,8 +178,10 @@ Synchronous link(2).
 
 Asynchronous symlink(2). No arguments other than a possible exception are given
 to the completion callback.
-`type` argument can be either `'dir'` or `'file'` (default is `'file'`).  It is only 
+`type` argument can be either `'dir'`, `'file'`, or `'junction'` (default is `'file'`).  It is only 
 used on Windows (ignored on other platforms).
+Note that Windows junction points require the destination path to be absolute.  When using
+`'junction'`, the `destination` argument will automatically be normalized to absolute path.
 
 ## fs.symlinkSync(destination, path, [type])
 
@@ -269,6 +271,19 @@ An exception occurs if the file does not exist.
 
 * `'r+'` - Open file for reading and writing.
 An exception occurs if the file does not exist.
+
+* `'rs'` - Open file for reading in synchronous mode. Instructs the operating
+  system to bypass the local file system cache.
+
+  This is primarily useful for opening files on NFS mounts as it allows you to
+  skip the potentially stale local cache. It has a very real impact on I/O
+  performance so don't use this mode unless you need it.
+
+  Note that this doesn't turn `fs.open()` into a synchronous blocking call.
+  If that's what you want then you should be using `fs.openSync()`
+
+* `'rs+'` - Open file for reading and writing, telling the OS to open it
+  synchronously. See notes for `'rs'` about using this with caution.
 
 * `'w'` - Open file for writing.
 The file is created (if it does not exist) or truncated (if it exists).
@@ -464,7 +479,7 @@ you need to compare `curr.mtime` and `prev.mtime`.
 
 Stop watching for changes on `filename`.
 
-## fs.watch(filename, [options], listener)
+## fs.watch(filename, [options], [listener])
 
     Stability: 2 - Unstable.  Not available on all platforms.
 
